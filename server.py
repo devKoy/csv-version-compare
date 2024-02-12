@@ -1,11 +1,10 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Response, Request
-from fastapi.responses import JSONResponse
 import pandas as pd
-import io, os
+import time
+import json
+from fastapi import FastAPI, UploadFile, File, Request, Response
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
-
 
 origins = [
    "*"
@@ -36,16 +35,32 @@ async def add_CORS_header(request: Request, call_next):
     response.headers['Access-Control-Allow-Headers'] = '*'
     return response
 
-def compare_csv_sheets(old_df, updated_df):
+
+
+
+def count_total_rows(csv_file):
     try:
-        old_df['OrderNo'] = old_df['OrderNo'].fillna(method='ffill')
-        updated_df['OrderNo'] = updated_df['OrderNo'].fillna(method='ffill')
+        df = pd.read_csv(csv_file.file)
+        total_rows = len(df)
+        return {"total_rows": total_rows}
+    except Exception as e:
+        return {"error": str(e)}
+
+def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
+    try:
+        start_time = time.time()  # Start time
+        
+        # Explicitly create a copy of the sliced DataFrame
+        old_df = old_df.iloc[start_row:end_row].copy()
+        updated_df = updated_df.iloc[start_row:end_row].copy()
+
+        # Replace NaN values with a placeholder
+        old_df.fillna("", inplace=True)
+        updated_df.fillna("", inplace=True)
 
         result_df = pd.DataFrame(columns=list(updated_df.columns) + ['Update Type'])
 
-        # Replace NaN values with a placeholder for key columns
-        old_df[['OrderNo', 'StoreDescription']] = old_df[['OrderNo', 'StoreDescription']].fillna('NaN')
-        updated_df[['OrderNo', 'StoreDescription']] = updated_df[['OrderNo', 'StoreDescription']].fillna('NaN')
+        unchanged_rows_count = 0  # Counter for unchanged rows
 
         for index, old_row in old_df.iterrows():
             key_columns = ['OrderNo', 'StoreDescription']
@@ -61,6 +76,8 @@ def compare_csv_sheets(old_df, updated_df):
                 updated_row = matching_rows.iloc[0]
                 if not old_row.equals(updated_row):
                     result_df = pd.concat([result_df, updated_row.to_frame().T.assign(**{'Update Type': 'Updated'})], ignore_index=True)
+                else:
+                    unchanged_rows_count += 1  # Increment count for unchanged rows
 
         for index, new_row in updated_df.iterrows():
             key_columns = ['OrderNo', 'StoreDescription']
@@ -75,42 +92,51 @@ def compare_csv_sheets(old_df, updated_df):
 
         result_df = result_df.reset_index(drop=True)
 
-        # Convert DataFrame to JSON
-        result_json = result_df.to_json(orient='records')
+        total_time = time.time() - start_time  # Calculate total time taken
+        
+        # Define column names for the JSON keys
+        column_names = ['Vendor', 'UniversalNo', 'OrderNo', 'Location', 'OrderDate', 'ShipDate', 'CancelDate',
+                        'PLU', 'VLU', 'Department', 'Class', 'League', 'Team', 'Description1', 'StoreDescription',
+                        'Attribute1', 'Attribute2', 'Attribute3', 'QtyOrdered', 'QtyReceived', 'QtyRemaining',
+                        'Textbox197', 'OrderAmount', 'RetailAmount', 'Textbox206']
+        
+        # Convert result_df to JSON array with custom column names
+        result_json = result_df.rename(columns=dict(zip(result_df.columns, column_names))).to_dict(orient='records')
 
-        return result_json
-
+        return result_json, total_time, unchanged_rows_count, start_row, end_row, len(old_df), len(updated_df)
+    
     except Exception as e:
         # Log the exception for debugging
         print(f"Exception during CSV comparison: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise
 
-@app.post("/compare-csv/")
-async def compare_csv(
-    old_file: UploadFile = File(...),
-    updated_file: UploadFile = File(...),
-):
+
+@app.post("/count_total_rows")
+async def count_total_rows_endpoint(csv_file: UploadFile = File(...)):
+    return count_total_rows(csv_file)
+
+
+@app.post("/compare")
+async def compare_csv_files(start_row: int = 0, end_row: int = None, old_csv: UploadFile = File(...), updated_csv: UploadFile = File(...)):
     try:
-        # Read CSV files into memory
-        old_data = await old_file.read()
-        updated_data = await updated_file.read()
-
-        # Parse CSV data into Pandas DataFrames
-        old_df = pd.read_csv(io.StringIO(old_data.decode('utf-8')))
-        updated_df = pd.read_csv(io.StringIO(updated_data.decode('utf-8')))
+        # Load CSV files
+        old_df = pd.read_csv(old_csv.file)
+        updated_df = pd.read_csv(updated_csv.file)
 
         # Perform CSV comparison
-        result_json = compare_csv_sheets(old_df, updated_df)
+        result_json, total_time, unchanged_rows_count, start_row, end_row, old_row_count, updated_row_count = compare_csv_sheets(old_df, updated_df, start_row, end_row)
 
-        # Return the result as JSON
-        return JSONResponse(content=result_json)
+        response_data = {
+            "total_time": total_time,
+            "unchanged_rows_count": unchanged_rows_count,
+            "start_row": start_row,
+            "end_row": end_row,
+            "old_row_count": len(old_df),
+            "updated_row_count": len(updated_df),
+            "result": result_json,
+        }
 
-    except pd.errors.ParserError as pe:
-        # Handle CSV parsing errors
-        return HTTPException(status_code=400, detail=f"Error parsing CSV file: {str(pe)}")
-
+        return response_data
     except Exception as e:
-        # Handle other exceptions and log for debugging
-        print(f"Unhandled exception: {str(e)}")
-        return HTTPException(status_code=500, detail="Internal Server Error")
+        return {"error": f"Error during comparison: {str(e)}"}
 
