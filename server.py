@@ -43,15 +43,16 @@ def count_total_rows(csv_file, batch_size):
         total_loops = (total_rows + batch_size - 1) // batch_size  # Calculate total loops
 
         batch_points = []
+        start = 0
         for i in range(total_loops):
-            start = i * batch_size
-            end = min((i + 1) * batch_size, total_rows)
+            end = min(start + batch_size, total_rows)
             batch_points.append({"start": start, "end": end})
+            start = end + 1  # Next start point
 
         return {"total_rows": total_rows, "total_loops": total_loops, "batch_points": batch_points}
     except Exception as e:
         return {"error": str(e)}
-    
+
 def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
     try:
         start_time = time.time()  # Start time
