@@ -1,4 +1,4 @@
 fastapi==0.109.2
 pandas==2.2.0
-starlette==0.37.1
+starlette<0.37.0
 uvicorn==0.17.6
