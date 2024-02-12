@@ -36,13 +36,12 @@ async def add_CORS_header(request: Request, call_next):
     return response
 
 
-
-
-def count_total_rows(csv_file):
+def count_total_rows(csv_file, batch_size):
     try:
         df = pd.read_csv(csv_file.file)
         total_rows = len(df)
-        return {"total_rows": total_rows}
+        total_loops = (total_rows + batch_size - 1) // batch_size  # Calculate total loops
+        return {"total_rows": total_rows, "total_loops": total_loops}
     except Exception as e:
         return {"error": str(e)}
 
@@ -140,3 +139,7 @@ async def compare_csv_files(start_row: int = 0, end_row: int = None, old_csv: Up
     except Exception as e:
         return {"error": f"Error during comparison: {str(e)}"}
 
+# This block is used to run the FastAPI server when this script is executed directly
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
