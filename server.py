@@ -41,10 +41,17 @@ def count_total_rows(csv_file, batch_size):
         df = pd.read_csv(csv_file.file)
         total_rows = len(df)
         total_loops = (total_rows + batch_size - 1) // batch_size  # Calculate total loops
-        return {"total_rows": total_rows, "total_loops": total_loops}
+
+        batch_points = []
+        for i in range(total_loops):
+            start = i * batch_size
+            end = min((i + 1) * batch_size, total_rows)
+            batch_points.append({"start": start, "end": end})
+
+        return {"total_rows": total_rows, "total_loops": total_loops, "batch_points": batch_points}
     except Exception as e:
         return {"error": str(e)}
-
+    
 def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
     try:
         start_time = time.time()  # Start time
@@ -111,8 +118,9 @@ def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
 
 
 @app.post("/count_total_rows")
-async def count_total_rows_endpoint(csv_file: UploadFile = File(...)):
-    return count_total_rows(csv_file)
+async def count_total_rows_endpoint(csv_file: UploadFile = File(...), batch_size: int = 1000):
+    return count_total_rows(csv_file, batch_size)
+
 
 
 @app.post("/compare")
