@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import time
 import json
 from fastapi import FastAPI, UploadFile, File, Request, Response
@@ -6,9 +7,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 
-origins = [
-   "*"
-]
+origins = ["*"]
 
 ALLOWED_ORIGINS = '*' 
 middleware = [
@@ -35,7 +34,6 @@ async def add_CORS_header(request: Request, call_next):
     response.headers['Access-Control-Allow-Headers'] = '*'
     return response
 
-
 def count_total_rows(csv_file, batch_size):
     try:
         df = pd.read_csv(csv_file.file)
@@ -53,7 +51,7 @@ def count_total_rows(csv_file, batch_size):
     except Exception as e:
         return {"error": str(e)}
 
-def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
+def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None, style_map=None):
     try:
         start_time = time.time()  # Start time
         
@@ -97,19 +95,25 @@ def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
             if matching_rows.empty:
                 result_df = pd.concat([result_df, new_row.to_frame().T.assign(**{'Update Type': 'New'})], ignore_index=True)
 
+        # Apply styles based on VLU
+        if style_map:
+            for index, row in result_df.iterrows():
+                vlu = row.get('VLU', None)
+                if vlu and vlu in style_map:
+                    style = style_map[vlu]
+                    result_df.loc[index, 'Style'] = style
+
         result_df = result_df.reset_index(drop=True)
 
-        total_time = time.time() - start_time  # Calculate total time taken
-        
         # Define column names for the JSON keys
         column_names = ['Vendor', 'UniversalNo', 'OrderNo', 'Location', 'OrderDate', 'ShipDate', 'CancelDate',
                         'PLU', 'VLU', 'Department', 'Class', 'League', 'Team', 'Description1', 'StoreDescription',
                         'Attribute1', 'Attribute2', 'Attribute3', 'QtyOrdered', 'QtyReceived', 'QtyRemaining',
-                        'Textbox197', 'OrderAmount', 'RetailAmount', 'Textbox206']
+                        'Textbox197', 'OrderAmount', 'RetailAmount', 'Textbox206', 'Update Type', 'Style']
         
         # Convert result_df to JSON array with custom column names
-        result_json = result_df.rename(columns=dict(zip(result_df.columns, column_names))).to_dict(orient='records')
-
+        result_json = result_df.rename(columns=dict(zip(result_df.columns, column_names))).replace({np.nan: None}).to_dict(orient='records')
+        total_time = time.time() - start_time
         return result_json, total_time, unchanged_rows_count, start_row, end_row, len(old_df), len(updated_df)
     
     except Exception as e:
@@ -117,22 +121,23 @@ def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None):
         print(f"Exception during CSV comparison: {str(e)}")
         raise
 
-
 @app.post("/count_total_rows")
 async def count_total_rows_endpoint(csv_file: UploadFile = File(...), batch_size: int = 1000):
     return count_total_rows(csv_file, batch_size)
 
-
-
 @app.post("/compare")
-async def compare_csv_files(start_row: int = 0, end_row: int = None, old_csv: UploadFile = File(...), updated_csv: UploadFile = File(...)):
+async def compare_csv_files(start_row: int = 0, end_row: int = None, old_csv: UploadFile = File(...), updated_csv: UploadFile = File(...), style_excel: UploadFile = File(...)):
     try:
         # Load CSV files
         old_df = pd.read_csv(old_csv.file)
         updated_df = pd.read_csv(updated_csv.file)
+        
+        # Load style Excel file
+        style_df = pd.read_excel(style_excel.file)
+        style_map = dict(zip(style_df['VLU'], style_df['Style']))
 
         # Perform CSV comparison
-        result_json, total_time, unchanged_rows_count, start_row, end_row, old_row_count, updated_row_count = compare_csv_sheets(old_df, updated_df, start_row, end_row)
+        result_json, total_time, unchanged_rows_count, start_row, end_row, old_row_count, updated_row_count = compare_csv_sheets(old_df, updated_df, start_row, end_row, style_map)
 
         response_data = {
             "total_time": total_time,
