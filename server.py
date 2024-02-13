@@ -34,6 +34,32 @@ async def add_CORS_header(request: Request, call_next):
     response.headers['Access-Control-Allow-Headers'] = '*'
     return response
 
+def calculate_qty_due(csv_file, order_no=None):
+    try:
+        # Read the uploaded CSV file
+        df = pd.read_csv(csv_file.file)
+
+        # Convert 'QtyOrdered' and 'QtyReceived' columns to integers
+        df['QtyOrdered'] = pd.to_numeric(df['QtyOrdered'], errors='coerce').fillna(0).astype(int)
+        df['QtyReceived'] = pd.to_numeric(df['QtyReceived'], errors='coerce').fillna(0).astype(int)
+
+        if order_no:
+            # Filter DataFrame by OrderNo if provided
+            df = df[df['OrderNo'] == order_no]
+
+        # Group items by 'OrderNo' and calculate the sum of 'QtyOrdered' and 'QtyReceived'
+        grouped_df = df.groupby('OrderNo').agg({'QtyOrdered': 'sum', 'QtyReceived': 'sum'}).reset_index()
+
+        # Calculate the quantity due for each order
+        grouped_df['QtyDue'] = grouped_df['QtyOrdered'] - grouped_df['QtyReceived']
+
+        # Convert the result to a dictionary
+        result_dict = grouped_df.to_dict(orient='records')
+
+        return result_dict
+    except Exception as e:
+        return {"error": str(e)}
+
 def count_total_rows(csv_file, batch_size):
     try:
         df = pd.read_csv(csv_file.file)
@@ -120,6 +146,10 @@ def compare_csv_sheets(old_df, updated_df, start_row=0, end_row=None, style_map=
         # Log the exception for debugging
         print(f"Exception during CSV comparison: {str(e)}")
         raise
+
+@app.post("/calculate_qty_due")
+async def calculate_qty_due_endpoint(csv_file: UploadFile = File(...), order_no: str = None):
+    return calculate_qty_due(csv_file, order_no)
 
 @app.post("/count_total_rows")
 async def count_total_rows_endpoint(csv_file: UploadFile = File(...), batch_size: int = 1000):
