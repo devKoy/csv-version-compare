@@ -19,7 +19,6 @@ app.add_middleware(
 )
 def calculate_qty_due(df, order_no: Optional[str] = None):
     try:
-
         if order_no:
             # Filter DataFrame by OrderNo if provided
             df = df[df['Order #'] == order_no]
@@ -34,7 +33,6 @@ def calculate_qty_due(df, order_no: Optional[str] = None):
                 due = qty_due[0]
             else:
                 due = 0  # If no records found for the given order number
-
             return {
                 'qty_due': due
             }
@@ -156,9 +154,9 @@ async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no
         newDF = pd.read_excel(excelFile.file, sheet_name='Details', header=1)
         res = calculate_qty_due(newDF, order_no)
 
-    return {
-            "total_time": res['qty_due']
-    }
+        return {
+                "total_qty": res['qty_due']
+        }
     except Exception as e:
         raise HTTPException(status_code=200, detail=str(e))
 
