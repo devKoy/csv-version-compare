@@ -40,8 +40,8 @@ def calculate_qty_due(file_path, order_no: Optional[str] = None):
             result_dict = grouped_df.to_dict(orient='records')
             return result_dict
     except Exception as e:
-        raise Exception(f"Error: {str(e)}")
-
+        return {"error": str(e)}
+        
 def count_total_rows(file_path, batch_size):
     try:
         df = pd.read_excel(file_path, sheet_name='Details', header=1)
