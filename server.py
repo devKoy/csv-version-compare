@@ -17,7 +17,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-def calculate_qty_due(file_path, order_no: Optional[str] = None):
+def calculate_qty_due(df, order_no: Optional[str] = None):
     try:
 
         if order_no:
