@@ -16,33 +16,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def calculate_qty_due(file_path, order_no: Optional[str] = None):
+def calculate_qty_due(file_path, order_no=None):
     try:
-        # Read the uploaded Excel file
         df = pd.read_excel(file_path, sheet_name='Details', header=1)
+        df['QtyOrdered'] = pd.to_numeric(df['QtyOrdered'], errors='coerce').fillna(0).astype(int)
+        df['QtyReceived'] = pd.to_numeric(df['QtyReceived'], errors='coerce').fillna(0).astype(int)
 
         if order_no:
-            # Filter DataFrame by OrderNo if provided
-            df = df[df['Order #'] == order_no]
+            df = df[df['OrderNo'] == order_no]
 
-        # Group items by 'Order #' and calculate the sum of 'Qty Due'
-        grouped_df = df.groupby('Order #')['Qty Due'].sum().reset_index()
-
-        if order_no:
-            # Return the Qty Due for the specific order number
-            qty_due = grouped_df[grouped_df['Order #'] == order_no]['Qty Due'].values
-            if qty_due.size > 0:
-                return qty_due[0]
-            else:
-                return 0  # If no records found for the given order number
-        else:
-            # Return the grouped result for all orders
-            result_dict = grouped_df.to_dict(orient='records')
-            return result_dict
-    except Exception as e:
-        print(f"Exception when getting the total of Quantity Due: {str(e)}")
-        raise
+        grouped_df = df.groupby('OrderNo').agg({'QtyOrdered': 'sum', 'QtyReceived': 'sum'}).reset_index()
+        grouped_df['QtyDue'] = grouped_df['QtyOrdered'] - grouped_df['QtyReceived']
         
+        # Convert Timestamp objects to strings
+        grouped_df['Ship Date'] = grouped_df['Ship Date'].astype(str)
+        grouped_df['Cancel Date'] = grouped_df['Cancel Date'].astype(str)
+
+        result_dict = grouped_df.to_dict(orient='records')
+        return result_dict
+    except Exception as e:
+        return {"error": str(e)}
+
 def count_total_rows(file_path, batch_size):
     try:
         df = pd.read_excel(file_path, sheet_name='Details', header=1)
@@ -164,14 +158,6 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
         print(f"Exception during CSV comparison: {str(e)}")
         raise
 
-@app.post("/calculate-qty-due")
-async def calculate_qty_due_endpoint(order_no: Optional[str] = None, csv_file: UploadFile = File(...)):
-    try:
-        result = calculate_qty_due(csv_file.file, order_no)
-        return JSONResponse(content={"Qty Due": result})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
 @app.post("/compare-sheets")
 async def compare_sheets(old_file: UploadFile = File(...), updated_file: UploadFile = File(...), min_row: int = 0, max_row: int = None):
     try:
