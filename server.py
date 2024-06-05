@@ -19,7 +19,7 @@ app.add_middleware(
 def calculate_qty_due(file_path, order_no: Optional[str] = None):
     try:
         # Read the uploaded Excel file
-        df = pd.read_excel(csv_file, sheet_name='Details', header=1)
+        df = pd.read_excel(file_path, sheet_name='Details', header=1)
 
         if order_no:
             # Filter DataFrame by OrderNo if provided
@@ -40,7 +40,8 @@ def calculate_qty_due(file_path, order_no: Optional[str] = None):
             result_dict = grouped_df.to_dict(orient='records')
             return result_dict
     except Exception as e:
-        return {"error": str(e)}
+        print(f"Exception when getting the total of Quantity Due: {str(e)}")
+        raise
         
 def count_total_rows(file_path, batch_size):
     try:
@@ -165,7 +166,11 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
 
 @app.post("/calculate-qty-due")
 async def calculate_qty_due_endpoint(order_no: Optional[str] = None, csv_file: UploadFile = File(...)):
-    return calculate_qty_due(csv_file, order_no)
+    try:
+        result = calculate_qty_due(csv_file.file, order_no)
+        return JSONResponse(content={"Qty Due": result})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/compare-sheets")
 async def compare_sheets(old_file: UploadFile = File(...), updated_file: UploadFile = File(...), min_row: int = 0, max_row: int = None):
