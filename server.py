@@ -39,7 +39,8 @@ def calculate_qty_due(df, order_no: Optional[str] = None):
             result_dict = grouped_df.to_dict(orient='records')
             return result_dict
     except Exception as e:
-        raise Exception(f"Error: {str(e)}")
+        print(f"Exception during CSV comparison: {str(e)}")
+        raise
         
 def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
     try:
@@ -151,7 +152,7 @@ async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no
         newDF = pd.read_excel(excelFile.file, sheet_name='Details', header=1)
         return calculate_qty_due(newDF, order_no)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=200, detail=str(e))
 
 @app.post("/compare-sheets")
 async def compare_sheets(old_file: UploadFile = File(...), updated_file: UploadFile = File(...), min_row: int = 0, max_row: int = None):
