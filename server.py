@@ -19,8 +19,6 @@ app.add_middleware(
 )
 def calculate_qty_due(file_path, order_no: Optional[str] = None):
     try:
-        # Read the uploaded Excel file
-        df = pd.read_excel(file_path, sheet_name='Details', header=1)
 
         if order_no:
             # Filter DataFrame by OrderNo if provided
@@ -148,8 +146,12 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
         raise
 
 @app.post("/calculate_qty_due")
-async def calculate_qty_due_endpoint(csv_file: UploadFile = File(...), order_no: str = None):
-    return calculate_qty_due(csv_file, order_no)
+async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no: str = None):
+    try:
+        newDF = pd.read_excel(excelFile.file, sheet_name='Details', header=1)
+        return calculate_qty_due(newDF, order_no)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/compare-sheets")
 async def compare_sheets(old_file: UploadFile = File(...), updated_file: UploadFile = File(...), min_row: int = 0, max_row: int = None):
