@@ -27,11 +27,11 @@ def calculate_qty_due(file_path, order_no=None):
 
         grouped_df = df.groupby('OrderNo').agg({'QtyOrdered': 'sum', 'QtyReceived': 'sum'}).reset_index()
         grouped_df['QtyDue'] = grouped_df['QtyOrdered'] - grouped_df['QtyReceived']
-
-         # Convert Timestamp objects to strings
-        grouped_df['Ship Date'] = grouped_df['Ship Date'].dt.strftime('%Y-%m-%d')
-        grouped_df['Cancel Date'] = grouped_df['Cancel Date'].dt.strftime('%Y-%m-%d')
         
+        # Convert Timestamp objects to strings
+        grouped_df['Ship Date'] = grouped_df['Ship Date'].astype(str)
+        grouped_df['Cancel Date'] = grouped_df['Cancel Date'].astype(str)
+
         result_dict = grouped_df.to_dict(orient='records')
         return result_dict
     except Exception as e:
@@ -165,38 +165,21 @@ async def compare_sheets(old_file: UploadFile = File(...), updated_file: UploadF
         updated_df = pd.read_excel(updated_file.file, sheet_name='Details', header=1)
 
         comparison_result = compare_csv_sheets(old_df, updated_df, min_row, max_row)
+        result_df = comparison_result['result_df']
 
-        response_data = {
+        return {
             "total_time": comparison_result['total_time'],
             "unchanged_rows_count": comparison_result['unchanged_rows_count'],
             "new_rows_count": comparison_result['new_rows_count'],
             "removed_rows_count": comparison_result['removed_rows_count'],
             "updated_rows_count": comparison_result['updated_rows_count'],
-            "start_row": comparison_result['min_row'],
-            "end_row": comparison_result['max_row'],
+            "min_row": comparison_result['min_row'],
+            "max_row": comparison_result['max_row'],
             "old_row_count": comparison_result['old_row_count'],
             "updated_row_count": comparison_result['updated_row_count'],
-            "result": comparison_result['result_df'].to_dict(orient='records')
+            "result_df": result_df.to_dict(orient="records")
         }
 
-        return JSONResponse(content=response_data)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/calculate-qty-due")
-async def calculate_qty_due_endpoint(file: UploadFile = File(...), order_no: str = None):
-    try:
-        result = calculate_qty_due(file.file, order_no)
-        return JSONResponse(content=result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/count-total-rows")
-async def count_total_rows_endpoint(file: UploadFile = File(...), batch_size: int = 100):
-    try:
-        result = count_total_rows(file.file, batch_size)
-        return JSONResponse(content=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
