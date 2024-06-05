@@ -27,6 +27,11 @@ def calculate_qty_due(file_path, order_no=None):
 
         grouped_df = df.groupby('OrderNo').agg({'QtyOrdered': 'sum', 'QtyReceived': 'sum'}).reset_index()
         grouped_df['QtyDue'] = grouped_df['QtyOrdered'] - grouped_df['QtyReceived']
+
+         # Convert Timestamp objects to strings
+        grouped_df['Ship Date'] = grouped_df['Ship Date'].dt.strftime('%Y-%m-%d')
+        grouped_df['Cancel Date'] = grouped_df['Cancel Date'].dt.strftime('%Y-%m-%d')
+        
         result_dict = grouped_df.to_dict(orient='records')
         return result_dict
     except Exception as e:
