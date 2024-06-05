@@ -17,33 +17,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 def calculate_qty_due(df, order_no: Optional[str] = None):
     try:
         if order_no:
             # Filter DataFrame by OrderNo if provided
             df = df[df['Order #'] == order_no]
-
+        # Group items by 'Order #' and calculate the sum of 'Qty Due'
+        # Convert 'Qty Due' column to numeric type
+        df['Qty Due'] = pd.to_numeric(df['Qty Due'], errors='coerce')
         # Group items by 'Order #' and calculate the sum of 'Qty Due'
         grouped_df = df.groupby('Order #')['Qty Due'].sum().reset_index()
-        due = 0
         if order_no:
             # Return the Qty Due for the specific order number
             qty_due = grouped_df[grouped_df['Order #'] == order_no]['Qty Due'].values
+            print(qty_due[0])
             if qty_due.size > 0:
-                due = qty_due[0]
+                return qty_due[0]
             else:
-                due = 0  # If no records found for the given order number
-            return {
-                'qty_due': due
-            }
+                return 0  # If no records found for the given order number
         else:
             # Return the grouped result for all orders
             result_dict = grouped_df.to_dict(orient='records')
             return result_dict
     except Exception as e:
-        print(f"Exception during CSV comparison: {str(e)}")
-        raise
-        
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
 def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
     try:
         start_time = time.time()
@@ -149,17 +148,14 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
         raise
 
 @app.post("/calculate_qty_due")
-async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no: str = None):
+async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no: Optional[str] = None):
     try:
-        newDF = pd.read_excel(excelFile.file, sheet_name='Details', header=1)
-        res = calculate_qty_due(newDF, order_no)
-
-        return {
-                "total_qty": res['qty_due']
-        }
+        # Read the uploaded Excel file
+        df = pd.read_excel(excelFile.file, sheet_name='Details', header=1)
+        qty_due = calculate_qty_due(df, order_no)
+        return {'total_qty_due' : int(qty_due)}
     except Exception as e:
-        raise HTTPException(status_code=200, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @app.post("/compare-sheets")
