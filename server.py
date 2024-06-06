@@ -66,6 +66,12 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
         old_df.rename(columns=column_mapping, inplace=True)
         updated_df.rename(columns=column_mapping, inplace=True)
 
+        # Ensure data types are consistent
+        key_columns = ['OrderNo', 'VLU', 'Style #', 'Style Size']
+        for col in key_columns:
+            old_df[col] = old_df[col].astype(str).str.strip()
+            updated_df[col] = updated_df[col].astype(str).str.strip()
+
         if max_row:
             old_df_subset = old_df.iloc[min_row:max_row].copy()
             updated_df_subset = updated_df.iloc[min_row:max_row].copy()
@@ -86,13 +92,13 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
         matched_indices = set()
 
         for new_index, new_row in updated_df_subset.iterrows():
-            key_columns = ['OrderNo', 'VLU', 'Style #']
             key_values = new_row[key_columns].values
 
-            matching_rows = old_df[
-                (old_df['OrderNo'] == key_values[0]) & 
-                (old_df['VLU'] == key_values[1]) & 
-                (old_df['Style #'] == key_values[2])
+            matching_rows = old_df_subset[
+                (old_df_subset['OrderNo'] == key_values[0]) &
+                (old_df_subset['VLU'] == key_values[1]) &
+                (old_df_subset['Style #'] == key_values[2])&
+                (old_df_subset['Style Size'] == key_values[3])
             ]
 
             if matching_rows.empty:
@@ -111,16 +117,10 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
                         matched_indices.add(old_index)
                         found_match = True
                         break
-                    elif not found_match:
-                        result_df = pd.concat([result_df, new_row.to_frame().T.assign(**{'Update Type': 'Updated'})], ignore_index=True)
-                        updated_rows_count += 1
-                        matched_indices.add(old_index)
-                        found_match = True
-                        break
 
                 if not found_match:
-                    result_df = pd.concat([result_df, new_row.to_frame().T.assign(**{'Update Type': 'New'})], ignore_index=True)
-                    new_rows_count += 1
+                    result_df = pd.concat([result_df, new_row.to_frame().T.assign(**{'Update Type': 'Updated'})], ignore_index=True)
+                    updated_rows_count += 1
 
         for old_index, old_row in old_df_subset.iterrows():
             if old_index not in matched_indices:
@@ -142,10 +142,11 @@ def compare_csv_sheets(old_df, updated_df, min_row=0, max_row=None):
             'old_row_count': len(old_df),
             'updated_row_count': len(updated_df)
         }
-    
+
     except Exception as e:
         print(f"Exception during CSV comparison: {str(e)}")
         raise
+       
 
 @app.post("/calculate_qty_due")
 async def calculate_qty_due_endpoint(excelFile: UploadFile = File(...), order_no: Optional[str] = None):
